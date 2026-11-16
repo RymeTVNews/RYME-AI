@@ -1,6 +1,8 @@
 import base64
 import json
+import struct
 import tempfile
+import zlib
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -16,10 +18,21 @@ PNG = base64.b64decode(
 LAST_REQUEST: dict = {}
 
 
+def make_png(w: int, h: int) -> bytes:
+    def chunk(tag, data):
+        c = struct.pack(">I", len(data)) + tag + data
+        return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    raw = b"".join(b"\x00" + b"\xff\x00\x00" * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
 class FakeSD(BaseHTTPRequestHandler):
     def do_POST(self):
         body = self.rfile.read(int(self.headers["Content-Length"]))
+        LAST_REQUEST.clear()
         LAST_REQUEST.update(json.loads(body))
+        LAST_REQUEST["_route"] = self.path
         out = json.dumps({"images": [base64.b64encode(PNG).decode()]}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -55,6 +68,34 @@ class ImageTest(unittest.TestCase):
             out = Workspace(d).call("generate_image", {"prompt": "a cat"})
             self.assertTrue(out.startswith("Image créée : images/ryme_"), out)
             self.assertEqual((Path(d) / out.split(" : ")[1]).read_bytes(), PNG)
+
+    def test_image_size_png_and_jpeg(self):
+        self.assertEqual(images.image_size(make_png(300, 200)), (300, 200))
+        jpeg = (b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+                b"\xff\xc0\x00\x11\x08\x01\x2c\x01\x90\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01")
+        self.assertEqual(images.image_size(jpeg), (400, 300))
+        with self.assertRaises(images.ImageError):
+            images.image_size(b"GIF89a....")
+
+    def test_img2img_keeps_proportions_and_clamps_strength(self):
+        images.img2img(make_png(2000, 1000), "make it blue", strength=5, host=self.host)
+        self.assertEqual(LAST_REQUEST["_route"], "/sdapi/v1/img2img")
+        self.assertEqual((LAST_REQUEST["width"], LAST_REQUEST["height"]), (1024, 512))
+        self.assertEqual(LAST_REQUEST["denoising_strength"], 1.0)
+        self.assertEqual(len(LAST_REQUEST["init_images"]), 1)
+
+    def test_edit_image_keeps_original_and_blocks_escape(self):
+        import os
+        os.environ["RYME_IMAGE_HOST"] = self.host
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "a.png"
+            original = make_png(64, 64)
+            src.write_bytes(original)
+            ws = Workspace(d)
+            out = ws.call("edit_image", {"path": "a.png", "prompt": "blue"})
+            self.assertTrue(out.startswith("Image créée : images/ryme_edit_"), out)
+            self.assertEqual(src.read_bytes(), original)
+            self.assertTrue(ws.call("edit_image", {"path": "../x.png", "prompt": "b"}).startswith("Erreur"))
 
     def test_server_down_gives_clear_error(self):
         with self.assertRaises(images.ImageError):

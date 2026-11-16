@@ -62,6 +62,18 @@ class Workspace:
         path.write_bytes(png)
         return f"Image créée : {path.relative_to(self.root).as_posix()}"
 
+    def edit_image(self, path: str, prompt: str, negative_prompt: str = "",
+                   strength: float = 0.6, steps: int = 25) -> str:
+        src = self._resolve(path)
+        if src.stat().st_size > 20_000_000:
+            return "Image trop volumineuse (20 Mo maximum)."
+        png = images.img2img(src.read_bytes(), prompt, negative_prompt, strength, steps)
+        out = self._resolve("images")
+        out.mkdir(exist_ok=True)
+        dest = out / f"ryme_edit_{time.strftime('%Y%m%d_%H%M%S')}.png"
+        dest.write_bytes(png)  # l'original n'est jamais modifié
+        return f"Image créée : {dest.relative_to(self.root).as_posix()}"
+
     def remember(self, note: str) -> str:
         if self.memory is None:
             return "La mémoire est désactivée."
@@ -85,6 +97,7 @@ class Workspace:
             "web_search": web.web_search,
             "fetch_url": web.fetch_url,
             "generate_image": self.generate_image,
+            "edit_image": self.edit_image,
             "remember": self.remember,
             "forget": self.forget,
         }.get(name)
@@ -127,6 +140,15 @@ TOOL_SPECS = [
            "negative_prompt": {"type": "string"},
            "width": {"type": "integer"}, "height": {"type": "integer"},
            "steps": {"type": "integer"}}, ["prompt"]),
+    _tool("edit_image",
+          "Modifie une image existante (PNG ou JPEG du dossier de travail) selon une description "
+          "en anglais, et enregistre le résultat dans une nouvelle image (l'original est conservé). "
+          "strength : 0.2-0.4 = retouche légère, 0.6 = changement net, 0.8+ = refonte libre.",
+          {"path": {"type": "string", "description": "Image à modifier, chemin relatif"},
+           "prompt": {"type": "string", "description": "Description du résultat voulu, en anglais"},
+           "negative_prompt": {"type": "string"},
+           "strength": {"type": "number"}, "steps": {"type": "integer"}},
+          ["path", "prompt"]),
     _tool("remember", "Garde une information durable sur l'utilisateur ou ses projets "
           "pour les prochaines sessions (préférences, décisions). Une phrase courte.",
           {"note": {"type": "string"}}, ["note"]),

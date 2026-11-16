@@ -18,6 +18,8 @@ Agent IA **100 % local** pour Windows : il discute, lit et écrit des fichiers e
 2. Lance-le avec l'option `--api` (ajoute `--api` à `COMMANDLINE_ARGS` dans `webui-user.bat`).
 3. Demande par exemple : « Génère un logo de chat robot ». Adresse par défaut : `http://127.0.0.1:7860` (variable `RYME_IMAGE_HOST` pour la changer).
 
+**Modifier une image** : outil `edit_image` (img2img) — par exemple « prends images/logo.png et passe-le en bleu ». L'image d'origine n'est jamais modifiée, le résultat est une nouvelle image dans `images/`. C'est une retransformation guidée par la description (pas une retouche ciblée comme Nano Banana) : l'agent règle la force du changement, de la retouche légère à la refonte.
+
 **Mémoire entre sessions** : l'agent peut garder des notes durables (préférences, projets) dans `%USERPROFILE%\.ryme-ai\memory.md` et les relit à chaque démarrage. Chaque ajout (`remember`) ou suppression (`forget`) te demande confirmation, pour qu'une page web piégée ne puisse pas écrire dans ta mémoire. Tu peux aussi éditer le fichier à la main (une note par ligne, commençant par `- `). Variable `RYME_HOME` pour changer le dossier.
 
 Options : `--model`, `--host`, `--dir`. Variables : `RYME_MODEL`, `OLLAMA_HOST`.
@@ -34,6 +36,6 @@ Pour publier une version : `git tag v0.1.0 && git push --tags`.
 
 ## Feuille de route
 
-- Modification d'images existantes (img2img, comme Nano Banana)
+- Retouche ciblée d'images (inpainting par zone)
 - Historique des conversations sauvegardé entre sessions
 - Installeur `.msi`
