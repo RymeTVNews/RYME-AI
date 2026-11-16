@@ -13,6 +13,7 @@ from .history import History
 from .memory import Memory
 from .llm import DEFAULT_HOST, DEFAULT_MODEL, OllamaClient, OllamaError
 from .tools import Workspace
+from . import zone
 
 BG, PANEL, FG, MUTED, ACCENT = "#14161a", "#1d2026", "#e6e6e6", "#8a8f98", "#6c8cff"
 
@@ -49,6 +50,8 @@ class ChatApp:
         self.dir_label.pack(side="left", padx=12, fill="x", expand=True)
         tk.Button(top, text="Dossier…", command=self._choose_dir, bg=BG, fg=FG,
                   relief="flat", activebackground=PANEL).pack(side="right", padx=4)
+        tk.Button(top, text="Image…", command=self._pick_image, bg=BG, fg=FG,
+                  relief="flat", activebackground=PANEL).pack(side="right", padx=4)
         tk.Button(top, text="Discussions…", command=self._show_discussions, bg=BG, fg=FG,
                   relief="flat", activebackground=PANEL).pack(side="right", padx=4)
         tk.Button(top, text="Nouvelle discussion", command=self._reset, bg=BG, fg=FG,
@@ -83,15 +86,77 @@ class ChatApp:
         self.chat.configure(state="disabled")
         self.chat.see("end")
 
+    def _pick_image(self):
+        """Affiche une image PNG du dossier de travail pour y choisir une zone."""
+        path = filedialog.askopenfilename(initialdir=self.directory, title="Choisir une image PNG",
+                                          filetypes=[("Images PNG", "*.png")])
+        if not path:
+            return
+        try:
+            rel = os.path.relpath(path, self.directory).replace(os.sep, "/")
+        except ValueError:  # autre lecteur Windows
+            rel = ".."
+        if rel.startswith(".."):
+            messagebox.showwarning("RYME AI", "L'image doit se trouver dans le dossier de travail "
+                                   "(ou l'un de ses sous-dossiers).")
+            return
+        self._show_image(rel)
+
     def _show_image(self, rel_path: str):
         try:
             img = tk.PhotoImage(file=os.path.join(self.directory, rel_path))
-            factor = max(1, -(-img.width() // 512))  # réduction entière pour tenir dans le chat
+            # réduction entière pour tenir dans le chat (512 px maximum dans les deux sens)
+            factor = max(1, -(-img.width() // 512), -(-img.height() // 512))
             img = img.subsample(factor, factor)
             self._imgs.append(img)
+            width, height = img.width(), img.height()
+            canvas = tk.Canvas(self.chat, width=width, height=height, bg=BG, cursor="crosshair",
+                               highlightthickness=1, highlightbackground=MUTED)
+            canvas.create_image(0, 0, image=img, anchor="nw")
+            drag = {"start": None, "item": None}
+
+            def draw(event):
+                if drag["item"]:
+                    canvas.delete(drag["item"])
+                x0, y0 = drag["start"]
+                make = canvas.create_oval if event.state & 0x1 else canvas.create_rectangle
+                drag["item"] = make(x0, y0, event.x, event.y, outline=ACCENT, width=2, dash=(4, 3))
+
+            def press(event):
+                if drag["item"]:
+                    canvas.delete(drag["item"])
+                    drag["item"] = None
+                drag["start"] = (event.x, event.y)
+
+            def motion(event):
+                if drag["start"]:
+                    draw(event)
+
+            def release(event):
+                if not drag["start"]:
+                    return
+                draw(event)
+                fractions = zone.selection_to_fractions(*drag["start"], event.x, event.y, width, height)
+                drag["start"] = None
+                if fractions is None:  # simple clic : pas de zone
+                    canvas.delete(drag["item"])
+                    drag["item"] = None
+                    return
+                shape = "ellipse" if event.state & 0x1 else "rectangle"
+                hint = zone.format_hint(rel_path, fractions, shape)
+                current = self.input.get("1.0", "end").strip()
+                self.input.delete("1.0", "end")
+                self.input.insert("1.0", zone.replace_hint(current, hint))
+                self.input.focus_set()
+
+            canvas.bind("<ButtonPress-1>", press)
+            canvas.bind("<B1-Motion>", motion)
+            canvas.bind("<ButtonRelease-1>", release)
+
             self.chat.configure(state="normal")
-            self.chat.image_create("end", image=img)
-            self.chat.insert("end", "\n\n")
+            self.chat.window_create("end", window=canvas)
+            self.chat.insert("end", f"\n{rel_path}\nPour retoucher une zone : glisse la souris sur l'image "
+                             "(Maj = ellipse), puis écris ce qui doit y apparaître.\n\n", "tool")
             self.chat.configure(state="disabled")
             self.chat.see("end")
         except Exception as exc:

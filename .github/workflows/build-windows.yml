@@ -18,6 +18,9 @@ jobs:
           python-version: "3.12"
       - name: Tests
         run: python -m unittest discover -s tests
+      - name: Test de l'interface (souris, aperçu d'image)
+        continue-on-error: true  # signale un problème sans bloquer la fabrication de l'exe
+        run: python tests/gui_smoke.py
       - name: Build exe
         run: |
           pip install pyinstaller
