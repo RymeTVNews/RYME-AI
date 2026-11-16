@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, scrolledtext
 
 from . import __version__
 from .agent import Agent
+from .memory import Memory
 from .llm import DEFAULT_HOST, DEFAULT_MODEL, OllamaClient, OllamaError
 from .tools import Workspace
 
@@ -22,6 +23,7 @@ class ChatApp:
         self.busy = False
         self.agent: Agent | None = None
         self.agent_key = None
+        self._imgs: list = []  # références pour que tkinter ne libère pas les images
 
         root.title(f"RYME AI {__version__}")
         root.geometry("900x680")
@@ -76,6 +78,20 @@ class ChatApp:
         self.chat.configure(state="disabled")
         self.chat.see("end")
 
+    def _show_image(self, rel_path: str):
+        try:
+            img = tk.PhotoImage(file=os.path.join(self.directory, rel_path))
+            factor = max(1, -(-img.width() // 512))  # réduction entière pour tenir dans le chat
+            img = img.subsample(factor, factor)
+            self._imgs.append(img)
+            self.chat.configure(state="normal")
+            self.chat.image_create("end", image=img)
+            self.chat.insert("end", "\n\n")
+            self.chat.configure(state="disabled")
+            self.chat.see("end")
+        except Exception as exc:
+            self._append("", f"(aperçu impossible : {exc})", "tool")
+
     def _choose_dir(self):
         d = filedialog.askdirectory(initialdir=self.directory, title="Dossier de travail")
         if d:
@@ -122,7 +138,7 @@ class ChatApp:
             if not llm.is_up():
                 raise OllamaError("Ollama ne répond pas. Installe-le depuis https://ollama.com, "
                                   f"lance-le, puis exécute : ollama pull {model}")
-            ws = Workspace(self.directory, confirm=self._confirm_from_thread)
+            ws = Workspace(self.directory, confirm=self._confirm_from_thread, memory=Memory())
             self.agent = Agent(llm, ws, on_tool=lambda n, a, r: self.events.put(("tool", n, a, r)))
             self.agent_key = key
         return self.agent
@@ -157,6 +173,8 @@ class ChatApp:
                     _, name, args, result = ev
                     first = (result.splitlines() or [""])[0][:100]
                     self._append("", f"🔧 {name}({', '.join(args)}) → {first}", "tool")
+                    if name == "generate_image" and result.startswith("Image créée : "):
+                        self._show_image(result.split(" : ", 1)[1].strip())
                 elif kind == "confirm":
                     _, desc, done, result = ev
                     result.append(messagebox.askyesno("Autoriser cette action ?", desc))

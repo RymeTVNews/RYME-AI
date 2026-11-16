@@ -6,6 +6,7 @@ import sys
 
 from . import __version__
 from .agent import Agent
+from .memory import Memory
 from .llm import DEFAULT_HOST, DEFAULT_MODEL, OllamaClient, OllamaError
 from .tools import Workspace
 
@@ -35,7 +36,7 @@ def main(argv=None):
         input("\nAppuie sur Entrée pour quitter.")
         return 1
 
-    agent = Agent(llm, Workspace(args.dir, confirm=_confirm), on_tool=_show_tool)
+    agent = Agent(llm, Workspace(args.dir, confirm=_confirm, memory=Memory()), on_tool=_show_tool)
     print(f"RYME AI {__version__} — modèle {args.model} — dossier {args.dir}")
     print("Tape ta demande (« exit » pour quitter).\n")
     while True:

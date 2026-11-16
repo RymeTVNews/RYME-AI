@@ -1,9 +1,10 @@
 """Outils que l'agent peut utiliser (lecture/écriture de fichiers, commandes)."""
 
 import subprocess
+import time
 from pathlib import Path
 
-from . import web
+from . import images, web
 
 MAX_OUTPUT = 8000
 
@@ -11,8 +12,9 @@ MAX_OUTPUT = 8000
 class Workspace:
     """Dossier de travail : l'agent ne peut pas écrire en dehors."""
 
-    def __init__(self, root: str | Path, confirm=None):
+    def __init__(self, root: str | Path, confirm=None, memory=None):
         self.root = Path(root).resolve()
+        self.memory = memory  # objet Memory ou None
         # confirm(description) -> bool ; par défaut tout est refusé pour les actions risquées
         self.confirm = confirm or (lambda _desc: False)
 
@@ -51,6 +53,29 @@ class Workspace:
         out = (res.stdout + res.stderr)[:MAX_OUTPUT]
         return f"[code {res.returncode}]\n{out}"
 
+    def generate_image(self, prompt: str, negative_prompt: str = "", width: int = 1024,
+                       height: int = 1024, steps: int = 25) -> str:
+        png = images.txt2img(prompt, negative_prompt, width, height, steps)
+        out = self._resolve("images")
+        out.mkdir(exist_ok=True)
+        path = out / f"ryme_{time.strftime('%Y%m%d_%H%M%S')}.png"
+        path.write_bytes(png)
+        return f"Image créée : {path.relative_to(self.root).as_posix()}"
+
+    def remember(self, note: str) -> str:
+        if self.memory is None:
+            return "La mémoire est désactivée."
+        if not self.confirm(f"Mémoriser pour les prochaines sessions : « {note} »"):
+            return "Refusé par l'utilisateur."
+        return self.memory.add(note)
+
+    def forget(self, text: str) -> str:
+        if self.memory is None:
+            return "La mémoire est désactivée."
+        if not self.confirm(f"Oublier les notes contenant : « {text} »"):
+            return "Refusé par l'utilisateur."
+        return self.memory.forget(text)
+
     def call(self, name: str, args: dict) -> str:
         fn = {
             "list_dir": self.list_dir,
@@ -59,6 +84,9 @@ class Workspace:
             "run_command": self.run_command,
             "web_search": web.web_search,
             "fetch_url": web.fetch_url,
+            "generate_image": self.generate_image,
+            "remember": self.remember,
+            "forget": self.forget,
         }.get(name)
         if fn is None:
             return f"Outil inconnu : {name}"
@@ -92,4 +120,16 @@ TOOL_SPECS = [
           {"query": {"type": "string"}}, ["query"]),
     _tool("fetch_url", "Télécharge une page web et retourne son texte.",
           {"url": {"type": "string"}}, ["url"]),
+    _tool("generate_image",
+          "Génère une image avec le GPU local à partir d'une description en anglais (plus "
+          "précise qu'en français). Retourne le chemin du fichier PNG créé.",
+          {"prompt": {"type": "string", "description": "Description détaillée, en anglais"},
+           "negative_prompt": {"type": "string"},
+           "width": {"type": "integer"}, "height": {"type": "integer"},
+           "steps": {"type": "integer"}}, ["prompt"]),
+    _tool("remember", "Garde une information durable sur l'utilisateur ou ses projets "
+          "pour les prochaines sessions (préférences, décisions). Une phrase courte.",
+          {"note": {"type": "string"}}, ["note"]),
+    _tool("forget", "Supprime de la mémoire les notes contenant ce texte.",
+          {"text": {"type": "string"}}, ["text"]),
 ]

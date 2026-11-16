@@ -13,6 +13,13 @@ Agent IA **100 % local** pour Windows : il discute, lit et écrit des fichiers e
 
 **Recherche web** : l'agent peut chercher sur le web (DuckDuckGo, sans clé d'API) et lire des pages. Seules ses requêtes de recherche et les pages demandées sortent de ton PC ; le modèle reste local. Les adresses locales et privées sont bloquées.
 
+**Images locales** : l'agent crée des images avec ta carte graphique (outil `generate_image`, fichiers PNG dans `images/` du dossier de travail, aperçu dans la fenêtre). Il faut un serveur d'images local :
+1. Installe [Stable Diffusion WebUI Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) et un modèle (par exemple SDXL ou FLUX, adaptés à 12 Go de VRAM).
+2. Lance-le avec l'option `--api` (ajoute `--api` à `COMMANDLINE_ARGS` dans `webui-user.bat`).
+3. Demande par exemple : « Génère un logo de chat robot ». Adresse par défaut : `http://127.0.0.1:7860` (variable `RYME_IMAGE_HOST` pour la changer).
+
+**Mémoire entre sessions** : l'agent peut garder des notes durables (préférences, projets) dans `%USERPROFILE%\.ryme-ai\memory.md` et les relit à chaque démarrage. Chaque ajout (`remember`) ou suppression (`forget`) te demande confirmation, pour qu'une page web piégée ne puisse pas écrire dans ta mémoire. Tu peux aussi éditer le fichier à la main (une note par ligne, commençant par `- `). Variable `RYME_HOME` pour changer le dossier.
+
 Options : `--model`, `--host`, `--dir`. Variables : `RYME_MODEL`, `OLLAMA_HOST`.
 
 ## Développement
@@ -27,6 +34,6 @@ Pour publier une version : `git tag v0.1.0 && git push --tags`.
 
 ## Feuille de route
 
-- Génération d'images locale (type Nano Banana) avec un modèle Stable Diffusion/FLUX
-- Mémoire entre sessions
+- Modification d'images existantes (img2img, comme Nano Banana)
+- Historique des conversations sauvegardé entre sessions
 - Installeur `.msi`
