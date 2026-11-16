@@ -8,7 +8,9 @@ Agent IA **100 % local** pour Windows : il discute, lit et écrit des fichiers e
 2. Télécharge un modèle (14B quantifié, tient dans 12 Go de VRAM) :
    `ollama pull qwen2.5-coder:14b`
 3. Télécharge le build : onglet **Actions** du dépôt → dernier build → artefact `ryme-ai-windows` (ou page **Releases** pour une version taguée).
-4. Double-clique `RYME-AI.exe` : la fenêtre de chat s'ouvre. Choisis ton dossier de travail avec le bouton « Dossier… ».
+3b. Pour une vraie installation, télécharge plutôt l'artefact `ryme-ai-msi` (ou la page **Releases**) : double-clique le fichier `.msi`. Il installe RYME AI dans `Program Files`, ajoute un raccourci dans le menu Démarrer et met `ryme-ai-cli` dans le PATH ; la désinstallation se fait depuis « Applications installées » de Windows. Une nouvelle version remplace l'ancienne.
+   Les fichiers ne sont pas signés numériquement : Windows peut afficher « SmartScreen a protégé votre ordinateur » → « Informations complémentaires » → « Exécuter quand même ».
+4. Sans installer, double-clique `RYME-AI.exe` : la fenêtre de chat s'ouvre. Choisis ton dossier de travail avec le bouton « Dossier… ».
    (`ryme-ai-cli.exe` est la version terminal.)
 
 **Recherche web** : l'agent peut chercher sur le web (DuckDuckGo, sans clé d'API) et lire des pages. Seules ses requêtes de recherche et les pages demandées sortent de ton PC ; le modèle reste local. Les adresses locales et privées sont bloquées.
@@ -42,4 +44,4 @@ Pour publier une version : `git tag v0.1.0 && git push --tags`.
 
 ## Feuille de route
 
-- Installeur `.msi`
+- Signature numérique des fichiers (évite l'avertissement SmartScreen)

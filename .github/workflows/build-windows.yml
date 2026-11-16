@@ -1,4 +1,4 @@
-name: Build Windows exe
+name: Build Windows (exe et msi)
 
 on:
   push:
@@ -32,6 +32,18 @@ jobs:
           path: |
             dist/RYME-AI.exe
             dist/ryme-ai-cli.exe
+      - name: Build msi (WiX)
+        id: msi
+        continue-on-error: true  # un souci d'installeur ne bloque pas les exe déjà publiés
+        run: |
+          $version = if ("${{ github.ref }}" -match '^refs/tags/v(\d+\.\d+\.\d+)$') { $Matches[1] } else { python -c "from ryme_ai import __version__; print(__version__)" }
+          dotnet tool install --global wix --version 5.0.2
+          wix build installer\Package.wxs -arch x64 -d Version=$version -d DistDir="$PWD\dist" -o "dist\RYME-AI-$version-x64.msi"
+      - uses: actions/upload-artifact@v4
+        if: steps.msi.outcome == 'success'
+        with:
+          name: ryme-ai-msi
+          path: dist/*.msi
       - name: Publish release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -39,3 +51,4 @@ jobs:
           files: |
             dist/RYME-AI.exe
             dist/ryme-ai-cli.exe
+            dist/*.msi

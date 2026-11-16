@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Installeur Windows (.msi) de RYME AI, construit avec WiX v5 :
+     wix build installer\Package.wxs -arch x64 -d Version=0.1.0 -d DistDir=C:\chemin\dist -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="RYME AI" Manufacturer="RymeTV" Version="$(Version)"
+           UpgradeCode="9BCB9373-1EBC-4889-A7CA-B86022E6A8E3" Scope="perMachine"
+           Language="1036" Codepage="1252">
+
+    <!-- Installer une nouvelle version remplace l'ancienne ; l'inverse est refusé. -->
+    <MajorUpgrade DowngradeErrorMessage="Une version plus récente de RYME AI est déjà installée." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="RYME AI" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ShortcutFolder" Name="RYME AI" />
+    </StandardDirectory>
+
+    <!-- Application graphique (fenêtre de chat) -->
+    <Component Id="GuiComponent" Directory="INSTALLFOLDER">
+      <File Id="GuiExe" Source="$(DistDir)\RYME-AI.exe" KeyPath="yes" />
+    </Component>
+
+    <!-- Version terminal, ajoutée au PATH pour être lancée depuis n'importe quel dossier -->
+    <Component Id="CliComponent" Directory="INSTALLFOLDER">
+      <File Id="CliExe" Source="$(DistDir)\ryme-ai-cli.exe" KeyPath="yes" />
+      <Environment Id="AddToPath" Name="PATH" Value="[INSTALLFOLDER]" Action="set"
+                   Part="last" Permanent="no" System="yes" />
+    </Component>
+
+    <!-- Raccourci du menu Démarrer -->
+    <Component Id="StartMenuComponent" Directory="ShortcutFolder">
+      <Shortcut Id="StartMenuShortcut" Name="RYME AI" Description="Agent IA local"
+                Target="[INSTALLFOLDER]RYME-AI.exe" WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveShortcutFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\RymeTV\RYME AI" Name="installed"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="RYME AI" Level="1">
+      <ComponentRef Id="GuiComponent" />
+      <ComponentRef Id="CliComponent" />
+      <ComponentRef Id="StartMenuComponent" />
+    </Feature>
+  </Package>
+</Wix>
