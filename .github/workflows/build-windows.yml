@@ -21,13 +21,18 @@ jobs:
       - name: Build exe
         run: |
           pip install pyinstaller
-          pyinstaller --onefile --name ryme-ai ryme_ai/__main__.py
+          pyinstaller --onefile --windowed --name RYME-AI run_gui.py
+          pyinstaller --onefile --name ryme-ai-cli run_cli.py
       - uses: actions/upload-artifact@v4
         with:
           name: ryme-ai-windows
-          path: dist/ryme-ai.exe
+          path: |
+            dist/RYME-AI.exe
+            dist/ryme-ai-cli.exe
       - name: Publish release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ryme-ai.exe
+          files: |
+            dist/RYME-AI.exe
+            dist/ryme-ai-cli.exe
