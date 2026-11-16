@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, scrolledtext
 
 from . import __version__
 from .agent import Agent
+from .history import History
 from .memory import Memory
 from .llm import DEFAULT_HOST, DEFAULT_MODEL, OllamaClient, OllamaError
 from .tools import Workspace
@@ -23,6 +24,7 @@ class ChatApp:
         self.busy = False
         self.agent: Agent | None = None
         self.agent_key = None
+        self.pending_restore: dict | None = None  # discussion à reprendre au prochain message
         self._imgs: list = []  # références pour que tkinter ne libère pas les images
 
         root.title(f"RYME AI {__version__}")
@@ -45,6 +47,8 @@ class ChatApp:
         self.dir_label = tk.Label(top, text=self.directory, bg=PANEL, fg=MUTED, anchor="w")
         self.dir_label.pack(side="left", padx=12, fill="x", expand=True)
         tk.Button(top, text="Dossier…", command=self._choose_dir, bg=BG, fg=FG,
+                  relief="flat", activebackground=PANEL).pack(side="right", padx=4)
+        tk.Button(top, text="Reprendre la dernière", command=self._resume, bg=BG, fg=FG,
                   relief="flat", activebackground=PANEL).pack(side="right", padx=4)
         tk.Button(top, text="Nouvelle discussion", command=self._reset, bg=BG, fg=FG,
                   relief="flat", activebackground=PANEL).pack(side="right", padx=4)
@@ -103,10 +107,34 @@ class ChatApp:
         if self.busy:
             return
         self.agent = None
+        self.pending_restore = None
+        self._clear_chat()
+        self._append("RYME AI", "Nouvelle discussion.", "ai")
+
+    def _clear_chat(self):
         self.chat.configure(state="normal")
         self.chat.delete("1.0", "end")
         self.chat.configure(state="disabled")
-        self._append("RYME AI", "Nouvelle discussion.", "ai")
+
+    def _resume(self):
+        if self.busy:
+            return
+        saved = History().latest()
+        if not saved:
+            messagebox.showinfo("RYME AI", "Aucune discussion sauvegardée.")
+            return
+        if saved["directory"] and os.path.isdir(saved["directory"]):
+            self.directory = saved["directory"]
+            self.dir_label.config(text=self.directory)
+        self.agent = None
+        self.pending_restore = saved
+        self._clear_chat()
+        self._append("RYME AI", f"Discussion reprise. Dossier de travail : {self.directory}", "ai")
+        for m in saved["messages"]:
+            if m.get("role") == "user":
+                self._append("Vous", m.get("content", ""), "user")
+            elif m.get("role") == "assistant" and m.get("content") and not m.get("tool_calls"):
+                self._append("RYME AI", m["content"], "ai")
 
     # ---------- envoi ----------
     def _on_enter(self, event):
@@ -134,12 +162,19 @@ class ChatApp:
         model = self.model_var.get().strip() or DEFAULT_MODEL
         key = (model, self.directory)
         if self.agent is None or self.agent_key != key:
+            previous = self.agent  # même dossier, autre modèle : on garde la discussion
             llm = OllamaClient(host=os.environ.get("OLLAMA_HOST", DEFAULT_HOST), model=model)
             if not llm.is_up():
                 raise OllamaError("Ollama ne répond pas. Installe-le depuis https://ollama.com, "
                                   f"lance-le, puis exécute : ollama pull {model}")
             ws = Workspace(self.directory, confirm=self._confirm_from_thread, memory=Memory())
-            self.agent = Agent(llm, ws, on_tool=lambda n, a, r: self.events.put(("tool", n, a, r)))
+            self.agent = Agent(llm, ws, on_tool=lambda n, a, r: self.events.put(("tool", n, a, r)),
+                               history=History())
+            if self.pending_restore:
+                self.agent.restore(self.pending_restore["id"], self.pending_restore["messages"])
+                self.pending_restore = None
+            elif previous is not None and self.agent_key and self.agent_key[1] == self.directory:
+                self.agent.restore(previous.session_id, previous.messages[1:])
             self.agent_key = key
         return self.agent
 

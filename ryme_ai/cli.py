@@ -6,6 +6,7 @@ import sys
 
 from . import __version__
 from .agent import Agent
+from .history import History
 from .memory import Memory
 from .llm import DEFAULT_HOST, DEFAULT_MODEL, OllamaClient, OllamaError
 from .tools import Workspace
@@ -26,6 +27,8 @@ def main(argv=None):
     parser.add_argument("--model", default=os.environ.get("RYME_MODEL", DEFAULT_MODEL))
     parser.add_argument("--host", default=os.environ.get("OLLAMA_HOST", DEFAULT_HOST))
     parser.add_argument("--dir", default=os.getcwd(), help="dossier de travail de l'agent")
+    parser.add_argument("--continue", dest="resume", action="store_true",
+                        help="reprendre la dernière discussion")
     parser.add_argument("--version", action="version", version=f"RYME AI {__version__}")
     args = parser.parse_args(argv)
 
@@ -36,7 +39,16 @@ def main(argv=None):
         input("\nAppuie sur Entrée pour quitter.")
         return 1
 
-    agent = Agent(llm, Workspace(args.dir, confirm=_confirm, memory=Memory()), on_tool=_show_tool)
+    history = History()
+    saved = history.latest() if args.resume else None
+    directory = saved["directory"] if saved and saved["directory"] and os.path.isdir(saved["directory"]) else args.dir
+    agent = Agent(llm, Workspace(directory, confirm=_confirm, memory=Memory()),
+                  on_tool=_show_tool, history=history)
+    if saved:
+        agent.restore(saved["id"], saved["messages"])
+        users = sum(1 for m in saved["messages"] if m.get("role") == "user")
+        print(f"Discussion reprise ({users} échange(s)) dans {directory}")
+    args.dir = directory
     print(f"RYME AI {__version__} — modèle {args.model} — dossier {args.dir}")
     print("Tape ta demande (« exit » pour quitter).\n")
     while True:
