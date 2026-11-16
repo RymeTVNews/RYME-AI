@@ -5,10 +5,12 @@ Le serveur d'images (lancé avec l'option --api) tourne sur ton PC et utilise ta
 
 import base64
 import json
+import math
 import os
 import struct
 import urllib.error
 import urllib.request
+import zlib
 
 DEFAULT_IMAGE_HOST = "http://127.0.0.1:7860"
 
@@ -94,6 +96,73 @@ def img2img(image: bytes, prompt: str, negative_prompt: str = "", strength=0.6, 
         "denoising_strength": strength,
         "width": max(64, min(1536, round(w * fit / 8) * 8)),
         "height": max(64, min(1536, round(h * fit / 8) * 8)),
+        "steps": _clamp(steps, 1, 60, 25),
+    }
+    return _post("/sdapi/v1/img2img", payload, host, timeout)
+
+
+def _target_size(w: int, h: int) -> tuple[int, int]:
+    fit = min(1.0, 1024 / max(w, h))  # garde les proportions, 1024 px max
+    return (max(64, min(1536, round(w * fit / 8) * 8)),
+            max(64, min(1536, round(h * fit / 8) * 8)))
+
+
+def make_mask(width: int, height: int, left: float, top: float, right: float, bottom: float,
+              shape: str = "rectangle") -> bytes:
+    """PNG en niveaux de gris : blanc = zone à retoucher, noir = zone conservée.
+    Les bords sont des fractions de l'image (0 = gauche/haut, 1 = droite/bas)."""
+    left, top, right, bottom = (max(0.0, min(1.0, float(v))) for v in (left, top, right, bottom))
+    if right - left < 0.01 or bottom - top < 0.01:
+        raise ImageError("Zone invalide : il faut left < right et top < bottom (valeurs entre 0 et 1).")
+    x0, x1 = left * width, right * width
+    y0, y1 = top * height, bottom * height
+    cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2
+    rows = []
+    for y in range(height):
+        row = bytearray(width)
+        if y0 <= y + 0.5 <= y1:
+            if shape == "ellipse":
+                dy = (y + 0.5 - cy) / ry
+                half = rx * math.sqrt(max(0.0, 1 - dy * dy))
+                a, b = round(cx - half), round(cx + half)
+            else:
+                a, b = round(x0), round(x1)
+            a, b = max(0, a), min(width, b)
+            row[a:b] = b"\xff" * max(0, b - a)
+        rows.append(b"\x00" + bytes(row))  # filtre « aucun » + pixels
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
+
+
+def inpaint(image: bytes, prompt: str, left: float, top: float, right: float, bottom: float,
+            shape: str = "rectangle", negative_prompt: str = "", strength=0.75, steps=25,
+            host: str | None = None, timeout: int = 900) -> bytes:
+    """Ne retouche que la zone indiquée ; le reste de l'image est conservé."""
+    w, h = image_size(image)
+    tw, th = _target_size(w, h)
+    mask = make_mask(tw, th, left, top, right, bottom, shape)
+    try:
+        strength = max(0.05, min(1.0, float(strength)))
+    except (TypeError, ValueError):
+        strength = 0.75
+    payload = {
+        "init_images": [base64.b64encode(image).decode("ascii")],
+        "mask": base64.b64encode(mask).decode("ascii"),
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "denoising_strength": strength,
+        "inpainting_fill": 1,           # part du contenu d'origine
+        "inpaint_full_res": True,       # travaille la zone en haute résolution
+        "inpaint_full_res_padding": 32,
+        "inpainting_mask_invert": 0,    # blanc = zone retouchée
+        "mask_blur": 8,                 # fondu des bords pour éviter les coutures
+        "width": tw,
+        "height": th,
         "steps": _clamp(steps, 1, 60, 25),
     }
     return _post("/sdapi/v1/img2img", payload, host, timeout)

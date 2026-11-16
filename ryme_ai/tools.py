@@ -74,6 +74,22 @@ class Workspace:
         dest.write_bytes(png)  # l'original n'est jamais modifié
         return f"Image créée : {dest.relative_to(self.root).as_posix()}"
 
+    def edit_image_zone(self, path: str, prompt: str, left: float, top: float, right: float,
+                        bottom: float, shape: str = "rectangle", negative_prompt: str = "",
+                        strength: float = 0.75, steps: int = 25) -> str:
+        src = self._resolve(path)
+        if src.stat().st_size > 20_000_000:
+            return "Image trop volumineuse (20 Mo maximum)."
+        if shape not in ("rectangle", "ellipse"):
+            return "Erreur : shape doit être « rectangle » ou « ellipse »."
+        png = images.inpaint(src.read_bytes(), prompt, left, top, right, bottom, shape,
+                             negative_prompt, strength, steps)
+        out = self._resolve("images")
+        out.mkdir(exist_ok=True)
+        dest = out / f"ryme_zone_{time.strftime('%Y%m%d_%H%M%S')}.png"
+        dest.write_bytes(png)  # l'original n'est jamais modifié
+        return f"Image créée : {dest.relative_to(self.root).as_posix()}"
+
     def remember(self, note: str) -> str:
         if self.memory is None:
             return "La mémoire est désactivée."
@@ -98,6 +114,7 @@ class Workspace:
             "fetch_url": web.fetch_url,
             "generate_image": self.generate_image,
             "edit_image": self.edit_image,
+            "edit_image_zone": self.edit_image_zone,
             "remember": self.remember,
             "forget": self.forget,
         }.get(name)
@@ -149,6 +166,22 @@ TOOL_SPECS = [
            "negative_prompt": {"type": "string"},
            "strength": {"type": "number"}, "steps": {"type": "integer"}},
           ["path", "prompt"]),
+    _tool("edit_image_zone",
+          "Retouche seulement UNE ZONE d'une image (PNG ou JPEG du dossier de travail) ; le reste "
+          "est conservé. Tu ne vois pas l'image : base-toi sur la description de l'utilisateur ou "
+          "sur des coordonnées qu'il donne. La zone se définit par des fractions de l'image entre 0 "
+          "et 1 : left/top = coin haut-gauche, right/bottom = coin bas-droit (0,0 = haut-gauche de "
+          "l'image, 1,1 = bas-droit). Exemples : moitié droite = 0.5,0,1,1 ; quart haut-gauche = "
+          "0,0,0.5,0.5 ; centre = 0.25,0.25,0.75,0.75. Si la position est vague, demande-la à "
+          "l'utilisateur plutôt que de deviner. prompt = ce qui doit apparaître dans la zone, en "
+          "anglais. Le résultat est une nouvelle image ; l'original est conservé.",
+          {"path": {"type": "string"}, "prompt": {"type": "string"},
+           "left": {"type": "number"}, "top": {"type": "number"},
+           "right": {"type": "number"}, "bottom": {"type": "number"},
+           "shape": {"type": "string", "enum": ["rectangle", "ellipse"]},
+           "negative_prompt": {"type": "string"},
+           "strength": {"type": "number"}, "steps": {"type": "integer"}},
+          ["path", "prompt", "left", "top", "right", "bottom"]),
     _tool("remember", "Garde une information durable sur l'utilisateur ou ses projets "
           "pour les prochaines sessions (préférences, décisions). Une phrase courte.",
           {"note": {"type": "string"}}, ["note"]),

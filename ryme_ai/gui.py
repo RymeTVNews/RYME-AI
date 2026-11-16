@@ -208,7 +208,7 @@ class ChatApp:
                     _, name, args, result = ev
                     first = (result.splitlines() or [""])[0][:100]
                     self._append("", f"🔧 {name}({', '.join(args)}) → {first}", "tool")
-                    if name in ("generate_image", "edit_image") and result.startswith("Image créée : "):
+                    if name in ("generate_image", "edit_image", "edit_image_zone") and result.startswith("Image créée : "):
                         self._show_image(result.split(" : ", 1)[1].strip())
                 elif kind == "confirm":
                     _, desc, done, result = ev
