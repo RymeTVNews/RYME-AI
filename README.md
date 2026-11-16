@@ -24,7 +24,7 @@ Agent IA **100 % local** pour Windows : il discute, lit et écrit des fichiers e
 
 **Mémoire entre sessions** : l'agent peut garder des notes durables (préférences, projets) dans `%USERPROFILE%\.ryme-ai\memory.md` et les relit à chaque démarrage. Chaque ajout (`remember`) ou suppression (`forget`) te demande confirmation, pour qu'une page web piégée ne puisse pas écrire dans ta mémoire. Tu peux aussi éditer le fichier à la main (une note par ligne, commençant par `- `). Variable `RYME_HOME` pour changer le dossier.
 
-**Historique des conversations** : chaque discussion est sauvegardée automatiquement dans `%USERPROFILE%\.ryme-ai\history\` (les 80 derniers messages sont gardés). Dans la fenêtre, le bouton « Reprendre la dernière » rouvre la dernière discussion avec son dossier de travail ; dans le terminal, lance `ryme-ai-cli.exe --continue`. Ces fichiers contiennent le texte des échanges et des résultats d'outils (y compris le contenu de fichiers lus) : ils restent sur ton PC, supprime-les si besoin.
+**Historique des conversations** : chaque discussion est sauvegardée automatiquement dans `%USERPROFILE%\.ryme-ai\history\` (les 80 derniers messages sont gardés). Dans la fenêtre, le bouton « Discussions… » liste toutes les discussions : double-clique pour en rouvrir une (avec son dossier de travail) ou utilise « Supprimer ». Dans le terminal : `ryme-ai-cli.exe --list` affiche la liste numérotée, `--continue` reprend la dernière, `--continue 3` reprend la n° 3 (ou donne un identifiant). Ces fichiers contiennent le texte des échanges et des résultats d'outils (y compris le contenu de fichiers lus) : ils restent sur ton PC, supprime-les si besoin.
 
 Options : `--model`, `--host`, `--dir`, `--continue`. Variables : `RYME_MODEL`, `OLLAMA_HOST`.
 
@@ -41,5 +41,4 @@ Pour publier une version : `git tag v0.1.0 && git push --tags`.
 ## Feuille de route
 
 - Sélection de la zone à la souris sur l'image, dans la fenêtre
-- Liste de toutes les discussions passées (pas seulement la dernière)
 - Installeur `.msi`

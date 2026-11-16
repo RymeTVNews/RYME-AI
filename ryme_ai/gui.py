@@ -3,6 +3,7 @@
 import os
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 
@@ -48,7 +49,7 @@ class ChatApp:
         self.dir_label.pack(side="left", padx=12, fill="x", expand=True)
         tk.Button(top, text="Dossier…", command=self._choose_dir, bg=BG, fg=FG,
                   relief="flat", activebackground=PANEL).pack(side="right", padx=4)
-        tk.Button(top, text="Reprendre la dernière", command=self._resume, bg=BG, fg=FG,
+        tk.Button(top, text="Discussions…", command=self._show_discussions, bg=BG, fg=FG,
                   relief="flat", activebackground=PANEL).pack(side="right", padx=4)
         tk.Button(top, text="Nouvelle discussion", command=self._reset, bg=BG, fg=FG,
                   relief="flat", activebackground=PANEL).pack(side="right", padx=4)
@@ -81,6 +82,113 @@ class ChatApp:
         self.chat.insert("end", text.rstrip() + "\n\n", tag)
         self.chat.configure(state="disabled")
         self.chat.see("end")
+
+    def _show_image(self, rel_path: str):
+        try:
+            img = tk.PhotoImage(file=os.path.join(self.directory, rel_path))
+            factor = max(1, -(-img.width() // 512))  # réduction entière pour tenir dans le chat
+            img = img.subsample(factor, factor)
+            self._imgs.append(img)
+            self.chat.configure(state="normal")
+            self.chat.image_create("end", image=img)
+            self.chat.insert("end", "\n\n")
+            self.chat.configure(state="disabled")
+            self.chat.see("end")
+        except Exception as exc:
+            self._append("", f"(aperçu impossible : {exc})", "tool")
+
+    def _choose_dir(self):
+        d = filedialog.askdirectory(initialdir=self.directory, title="Dossier de travail")
+        if d:
+            self.directory = d
+            self.dir_label.config(text=d)
+            self.agent = None  # nouvelle session dans le nouveau dossier
+
+    def _reset(self):
+        if self.busy:
+            return
+        self.agent = None
+        self.pending_restore = None
+        self._clear_chat()
+        self._append("RYME AI", "Nouvelle discussion.", "ai")
+
+    def _clear_chat(self):
+        self.chat.configure(state="normal")
+        self.chat.delete("1.0", "end")
+        self.chat.configure(state="disabled")
+
+    def _open_saved(self, saved: dict):
+        if saved["directory"] and os.path.isdir(saved["directory"]):
+            self.directory = saved["directory"]
+            self.dir_label.config(text=self.directory)
+        self.agent = None
+        self.pending_restore = saved
+        self._clear_chat()
+        self._append("RYME AI", f"Discussion reprise. Dossier de travail : {self.directory}", "ai")
+        for m in saved["messages"]:
+            if m.get("role") == "user":
+                self._append("Vous", m.get("content", ""), "user")
+            elif m.get("role") == "assistant" and m.get("content") and not m.get("tool_calls"):
+                self._append("RYME AI", m["content"], "ai")
+
+    def _current_session_id(self):
+        if self.pending_restore:
+            return self.pending_restore["id"]
+        return self.agent.session_id if self.agent else None
+
+    def _show_discussions(self):
+        if self.busy:
+            return
+        history = History()
+        win = tk.Toplevel(self.root)
+        win.title("Discussions")
+        win.geometry("640x360")
+        win.configure(bg=BG)
+        listbox = tk.Listbox(win, bg=PANEL, fg=FG, selectbackground=ACCENT, relief="flat",
+                             activestyle="none", font=("Segoe UI", 10))
+        listbox.pack(fill="both", expand=True, padx=10, pady=10)
+        items: list[dict] = []
+
+        def refresh():
+            items[:] = history.list()
+            listbox.delete(0, "end")
+            for d in items:
+                when = time.strftime("%d/%m/%Y %H:%M", time.localtime(d["updated"]))
+                listbox.insert("end", f"{when}   {d['title']}   ({d['count']} échange(s))")
+            if not items:
+                listbox.insert("end", "Aucune discussion sauvegardée.")
+
+        def selected():
+            sel = listbox.curselection()
+            return items[sel[0]] if sel and items else None
+
+        def open_it(_event=None):
+            d = selected()
+            if d:
+                win.destroy()
+                self._open_saved(d)
+
+        def delete_it():
+            d = selected()
+            if not d:
+                return
+            if d["id"] == self._current_session_id():
+                messagebox.showinfo("RYME AI", "Cette discussion est en cours : impossible de la supprimer.",
+                                    parent=win)
+            elif messagebox.askyesno("Supprimer", f"Supprimer « {d['title']} » ?", parent=win):
+                history.delete(d["id"])
+                refresh()
+
+        buttons = tk.Frame(win, bg=BG)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        tk.Button(buttons, text="Ouvrir", command=open_it, bg=ACCENT, fg="white",
+                  relief="flat", padx=14, pady=4).pack(side="left")
+        tk.Button(buttons, text="Supprimer", command=delete_it, bg=PANEL, fg=FG,
+                  relief="flat", padx=14, pady=4).pack(side="left", padx=8)
+        tk.Button(buttons, text="Fermer", command=win.destroy, bg=PANEL, fg=FG,
+                  relief="flat", padx=14, pady=4).pack(side="right")
+        listbox.bind("<Double-Button-1>", open_it)
+        refresh()
 
     def _show_image(self, rel_path: str):
         try:

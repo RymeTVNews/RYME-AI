@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -42,15 +43,48 @@ class History:
                                   ensure_ascii=False), encoding="utf-8")
         tmp.replace(path)
 
+    @staticmethod
+    def valid_id(session_id: str) -> bool:
+        """Évite qu'un identifiant sorte du dossier d'historique."""
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]+", session_id or ""))
+
+    def _read(self, path: Path) -> dict | None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None  # fichier abîmé : ignoré
+        msgs = data.get("messages") if isinstance(data, dict) else None
+        if not isinstance(msgs, list) or not msgs:
+            return None
+        users = [m for m in msgs if isinstance(m, dict) and m.get("role") == "user"]
+        title = " ".join(str(users[0].get("content", "")).split())[:60] if users else "(sans titre)"
+        return {"id": path.stem, "directory": data.get("directory", ""), "messages": msgs,
+                "title": title, "count": len(users), "updated": path.stat().st_mtime}
+
+    def list(self) -> list[dict]:
+        """Toutes les discussions, la plus récente d'abord."""
+        if not self.base.exists():
+            return []
+        files = sorted(self.base.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        return [d for d in (self._read(p) for p in files) if d]
+
+    def load(self, session_id: str) -> dict | None:
+        if not self.valid_id(session_id):
+            return None
+        path = self.base / f"{session_id}.json"
+        return self._read(path) if path.exists() else None
+
+    def delete(self, session_id: str) -> bool:
+        if not self.valid_id(session_id):
+            return False
+        path = self.base / f"{session_id}.json"
+        try:
+            path.unlink()
+            return True
+        except OSError:
+            return False
+
     def latest(self) -> dict | None:
-        """Dernière discussion : {'id', 'directory', 'messages'} ou None."""
-        files = sorted(self.base.glob("*.json"), key=lambda p: p.stat().st_mtime) if self.base.exists() else []
-        for path in reversed(files):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(data.get("messages"), list) and data["messages"]:
-                    return {"id": path.stem, "directory": data.get("directory", ""),
-                            "messages": data["messages"]}
-            except (OSError, ValueError):
-                continue  # fichier abîmé : on regarde le précédent
-        return None
+        """Dernière discussion ou None."""
+        found = self.list()
+        return found[0] if found else None

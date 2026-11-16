@@ -50,6 +50,50 @@ class HistoryTest(unittest.TestCase):
             (Path(d) / "broken.json").write_text("{pas du json", encoding="utf-8")
             self.assertEqual(h.latest()["id"], "new")
 
+    def test_list_load_delete(self):
+        with tempfile.TemporaryDirectory() as d:
+            h = History(Path(d))
+            h.save("a_1", [{"role": "user", "content": "premier   sujet"}], "/x")
+            time.sleep(0.02)
+            h.save("b_2", [{"role": "user", "content": "second"}, {"role": "assistant", "content": "r"},
+                           {"role": "user", "content": "suite"}], "/y")
+            items = h.list()
+            self.assertEqual([i["id"] for i in items], ["b_2", "a_1"])  # récent d'abord
+            self.assertEqual(items[1]["title"], "premier sujet")
+            self.assertEqual(items[0]["count"], 2)
+            self.assertEqual(h.load("a_1")["directory"], "/x")
+            self.assertTrue(h.delete("a_1"))
+            self.assertIsNone(h.load("a_1"))
+            self.assertFalse(h.delete("a_1"))
+
+    def test_ids_cannot_escape_history_folder(self):
+        with tempfile.TemporaryDirectory() as d:
+            secret = Path(d) / "secret.json"
+            secret.write_text(json.dumps({"messages": [{"role": "user", "content": "x"}]}))
+            h = History(Path(d) / "h")
+            h.save("ok", [{"role": "user", "content": "y"}], "/")
+            for bad in ("../secret", "..\\secret", "a/b", ""):
+                self.assertIsNone(h.load(bad))
+                self.assertFalse(h.delete(bad))
+            self.assertTrue(secret.exists())
+
+    def test_cli_list_and_continue(self):
+        import io, os
+        from contextlib import redirect_stdout
+        from ryme_ai import cli
+        with tempfile.TemporaryDirectory() as d:
+            os.environ["RYME_HOME"] = d
+            History().save("a_1", [{"role": "user", "content": "mon sujet"}], d)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(cli.main(["--list"]), 0)
+            self.assertIn("mon sujet", out.getvalue())
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(cli.main(["--continue", "7"]), 1)
+            self.assertIn("introuvable", out.getvalue())
+            os.environ.pop("RYME_HOME")
+
     def test_no_history_returns_none(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertIsNone(History(Path(d) / "vide").latest())
