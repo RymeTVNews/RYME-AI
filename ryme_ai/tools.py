@@ -3,6 +3,8 @@
 import subprocess
 from pathlib import Path
 
+from . import web
+
 MAX_OUTPUT = 8000
 
 
@@ -55,6 +57,8 @@ class Workspace:
             "read_file": self.read_file,
             "write_file": self.write_file,
             "run_command": self.run_command,
+            "web_search": web.web_search,
+            "fetch_url": web.fetch_url,
         }.get(name)
         if fn is None:
             return f"Outil inconnu : {name}"
@@ -84,4 +88,8 @@ TOOL_SPECS = [
           {"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]),
     _tool("run_command", "Exécute une commande shell dans le dossier de travail.",
           {"command": {"type": "string"}}, ["command"]),
+    _tool("web_search", "Cherche sur le web (informations récentes, documentation).",
+          {"query": {"type": "string"}}, ["query"]),
+    _tool("fetch_url", "Télécharge une page web et retourne son texte.",
+          {"url": {"type": "string"}}, ["url"]),
 ]

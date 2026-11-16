@@ -11,6 +11,8 @@ Agent IA **100 % local** pour Windows : il discute, lit et écrit des fichiers e
 4. Double-clique `RYME-AI.exe` : la fenêtre de chat s'ouvre. Choisis ton dossier de travail avec le bouton « Dossier… ».
    (`ryme-ai-cli.exe` est la version terminal.)
 
+**Recherche web** : l'agent peut chercher sur le web (DuckDuckGo, sans clé d'API) et lire des pages. Seules ses requêtes de recherche et les pages demandées sortent de ton PC ; le modèle reste local. Les adresses locales et privées sont bloquées.
+
 Options : `--model`, `--host`, `--dir`. Variables : `RYME_MODEL`, `OLLAMA_HOST`.
 
 ## Développement
@@ -26,5 +28,5 @@ Pour publier une version : `git tag v0.1.0 && git push --tags`.
 ## Feuille de route
 
 - Génération d'images locale (type Nano Banana) avec un modèle Stable Diffusion/FLUX
-- Recherche web et mémoire entre sessions
+- Mémoire entre sessions
 - Installeur `.msi`
